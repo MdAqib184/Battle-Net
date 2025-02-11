@@ -1,65 +1,151 @@
+// const axios = require("axios");
+// require("dotenv").config();
+
+// const CLIENT_ID = process.env.CLIENT_ID;
+// const CLIENT_SECRET = process.env.CLIENT_SECRET;
+// const REALM_ID = 1329;
+// const REGION = "eu";
+
+// const TRACKED_ITEMS = [
+//     { id: 1168, level: 65 },
+//     { id: 942, level: 65 }
+// ];
+
+// let lastPostedAuctions = new Map();
+
+// const TIME_PRIORITY = {
+//     "SHORT": 1,
+//     "MEDIUM": 2,
+//     "LONG": 3,
+//     "VERY_LONG": 4
+// };
+
+// async function getAccessToken() {
+//     try {
+//         const response = await axios.post(
+//             `https://${REGION}.battle.net/oauth/token`,
+//             new URLSearchParams({ grant_type: "client_credentials" }),
+//             {
+//                 auth: { username: CLIENT_ID, password: CLIENT_SECRET },
+//             }
+//         );
+//         return response.data.access_token;
+//     } catch (error) {
+//         console.error("Error getting token:", error.message);
+//         throw error;
+//     }
+// }
+
+// async function getAuctionData() {
+//     try {
+//         const token = await getAccessToken();
+//         const response = await axios.get(
+//             `https://${REGION}.api.blizzard.com/data/wow/connected-realm/${REALM_ID}/auctions`,
+//             {
+//                 headers: { Authorization: `Bearer ${token}` },
+//                 params: { namespace: `dynamic-${REGION}`, locale: "en_US" },
+//             }
+//         );
+
+//         const auctionData = response.data.auctions;
+        
+//         // Log raw auction data structure
+//         console.log("\n🔍 Sample auction data structure:");
+//         if (auctionData.length > 0) {
+//             console.log(JSON.stringify(auctionData[0], null, 2));
+//         }
+
+//         let filteredAuctions = auctionData
+//             .filter(item => {
+//                 // Log items that match IDs to see what's being filtered
+//                 if (TRACKED_ITEMS.some(tracked => tracked.id === item.item.id)) {
+//                     console.log("\nFound matching item:", item.item);
+//                 }
+//                 return item.quantity > 0 &&
+//                        TRACKED_ITEMS.some(tracked => tracked.id === item.item.id);
+//             })
+//             .map(item => ({
+//                 id: item.item.id,
+//                 price: item.unit_price ? item.unit_price / 10000 : item.buyout ? item.buyout / 10000 : "N/A",
+//                 quantity: item.quantity,
+//                 server: "Ravencrest",
+//                 region: REGION.toUpperCase(),
+//                 time_left: item.time_left
+//             }));
+
+//         console.log("\n✅ Filtered Auctions:", filteredAuctions);
+
+//         // Sort by time_left and price
+//         filteredAuctions.sort((a, b) => {
+//             const timeDiff = TIME_PRIORITY[a.time_left] - TIME_PRIORITY[b.time_left];
+//             return timeDiff !== 0 ? timeDiff : b.price - a.price;
+//         });
+
+//         // Get latest auctions
+//         const latestAuctions = filteredAuctions.slice(0, 5);
+
+//         // Process and log auctions
+//         for (const auction of latestAuctions) {
+//             const key = `${auction.id}-${auction.price}-${auction.server}`;
+
+//             if (!lastPostedAuctions.has(key) || lastPostedAuctions.get(key).price !== auction.price) {
+//                 lastPostedAuctions.set(key, auction);
+//                 console.log("\n🎯 Tracked Auction Found!");
+//                 console.log(`Item ID: ${auction.id}`);
+//                 console.log(`Server: ${auction.server} - ${auction.region}`);
+//                 console.log(`Price: ${auction.price} G`);
+//                 console.log(`Quantity: ${auction.quantity}`);
+//                 console.log(`Time Left: ${auction.time_left}`);
+//                 console.log("--------------------------");
+//             }
+//         }
+
+//     } catch (error) {
+//         console.error("Error:", error.response?.data || error.message);
+//     }
+// }
+
+// // Run the function
+// console.log("Starting auction check...");
+// getAuctionData()
+//     .then(() => process.exit(0));
+
+
+
 const axios = require("axios");
 require("dotenv").config();
 
-// Blizzard API Credentials
-const CLIENT_ID = process.env.CLIENT_ID;;
+const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REALM_ID = 1329; // Example: Ravencrest (EU)
-const REGION = "eu"; // Change to "us", "kr", etc.
-const MAX_RESULTS = 2; // Limit to the 5 most recent auctions
+const REALM_ID = 1329;
+const REGION = "eu";
 
-// Priority mapping for `time_left`
-const TIME_PRIORITY = {
-    "SHORT": 1,       // Most recent
-    "MEDIUM": 2,
-    "LONG": 3,
-    "VERY_LONG": 4    // Oldest
-};
+const TRACKED_ITEMS = [
+    { id: 1168, level: 65 },
+    { id: 942, level: 65 }
+];
 
-// Step 1: Get OAuth Token
 async function getAccessToken() {
-    const response = await axios.post(
-        `https://${REGION}.battle.net/oauth/token`,
-        new URLSearchParams({ grant_type: "client_credentials" }),
-        {
-            auth: { username: CLIENT_ID, password: CLIENT_SECRET },
-        }
-    );
-    return response.data.access_token;
-}
-
-// Step 2: Fetch All Realm IDs
-async function getAllRealmIds(token) {
     try {
-        const response = await axios.get(
-            `https://${REGION}.api.blizzard.com/data/wow/connected-realm/index`,
+        const response = await axios.post(
+            `https://${REGION}.battle.net/oauth/token`,
+            new URLSearchParams({ grant_type: "client_credentials" }),
             {
-                headers: { Authorization: `Bearer ${token}` },
-                params: { namespace: `dynamic-${REGION}`, locale: "en_US" },
+                auth: { username: CLIENT_ID, password: CLIENT_SECRET },
             }
         );
-
-        console.log("🔍 API Response for Realms:", JSON.stringify(response.data, null, 2));
-
-        if (!response.data.connected_realms || response.data.connected_realms.length === 0) {
-            console.error("⚠ No realms found in API response.");
-            return [];
-        }
-
-        return response.data.connected_realms.map(realm => {
-            const match = realm.href.match(/\/(\d+)$/);
-            return match ? match[1] : null;  // Extract realm IDs safely
-        }).filter(id => id !== null);  // Remove any null values
-
+        return response.data.access_token;
     } catch (error) {
-        console.error("❌ Error fetching realm IDs:", error.response?.data || error.message);
-        return [];
+        console.error("Error getting token:", error.message);
+        throw error;
     }
 }
 
-// Step 3: Fetch Auctions for a Given Realm
-async function getAuctionDataForRealm(token, realmId) {
+async function getAuctionData() {
     try {
+        const token = await getAccessToken();
+        console.log("Fetching auction data...");
+
         const response = await axios.get(
             `https://${REGION}.api.blizzard.com/data/wow/connected-realm/${REALM_ID}/auctions`,
             {
@@ -68,72 +154,57 @@ async function getAuctionDataForRealm(token, realmId) {
             }
         );
 
-        return response.data.auctions.map(item => ({
-            id: item.item.id,
-            price: item.unit_price ? item.unit_price / 10000 : item.buyout ? item.buyout / 10000 : "N/A",
-            quantity: item.quantity,
-            server: `Realm-${realmId}`,
-            region: REGION.toUpperCase(),
-            time_left: item.time_left || "UNKNOWN"  // Ensure time_left is never null
-        }));
-    } catch (error) {
-        console.error(`Error fetching data for realm ${REALM_ID}:`, error.message);
-        return [];
-    }
-}
+        const auctionData = response.data.auctions;
+        console.log(`Total auctions found: ${auctionData.length}`);
 
-// Step 4: Fetch All Auctions Across All Realms
-async function getMostRecentAuctions() {
-    try {
-        const token = await getAccessToken();
-        const realmIds = await getAllRealmIds(token);
+        // Group auctions by item ID, keeping only the highest priced ones
+        const latestAuctions = new Map();
 
-        console.log(`🔍 Fetching auction data for ${realmIds.length} realms...`);
+        auctionData.forEach(auction => {
+            const itemId = auction.item.id;
+            if (TRACKED_ITEMS.some(tracked => tracked.id === itemId)) {
+                const currentPrice = auction.unit_price ? auction.unit_price / 10000 : auction.buyout / 10000;
+                const existingAuction = latestAuctions.get(itemId);
 
-        let allAuctions = [];
-
-        // Fetch auctions from all realms in parallel
-        const auctionPromises = realmIds.map(realmId => getAuctionDataForRealm(token, realmId));
-        const results = await Promise.all(auctionPromises);
-
-        results.forEach(auctions => allAuctions.push(...auctions));
-
-        // Step 5: Remove duplicates & sort by recency
-        let uniqueAuctions = new Map();
-
-        allAuctions.forEach(auction => {
-            const key = `${auction.id}-${auction.price}-${auction.server}`;
-            if (!uniqueAuctions.has(key)) {
-                uniqueAuctions.set(key, auction);
+                // Update if:
+                // 1. No existing auction for this item, or
+                // 2. Current auction has a higher price (assuming higher price is more recent listing)
+                if (!existingAuction || currentPrice > existingAuction.price) {
+                    latestAuctions.set(itemId, {
+                        id: itemId,
+                        price: currentPrice,
+                        quantity: auction.quantity,
+                        server: "Ravencrest",
+                        region: REGION.toUpperCase(),
+                        time_left: auction.time_left
+                    });
+                }
             }
         });
 
-        let sortedAuctions = Array.from(uniqueAuctions.values()).sort((a, b) => {
-            const timeA = TIME_PRIORITY[a.time_left] || 99; // Default to 99 if null
-            const timeB = TIME_PRIORITY[b.time_left] || 99;
-            const timeDiff = timeA - timeB;
-            return timeDiff !== 0 ? timeDiff : b.price - a.price; // If same time_left, sort by price
-        });
-
-        // Step 6: Get Only the 5 Most Recent Auctions
-        const latestAuctions = sortedAuctions.slice(0, MAX_RESULTS);
-
-        // Step 7: Log Results
-        console.log(`✅ Showing ${latestAuctions.length} most recent auctions:`);
-        latestAuctions.forEach(auction => {
+        // Display the latest auctions
+        for (const auction of latestAuctions.values()) {
+            console.log("\n🎯 Tracked Auction Found!");
+            console.log("------------------------");
             console.log(`Item ID: ${auction.id}`);
             console.log(`Server: ${auction.server} - ${auction.region}`);
-            console.log(`Price: ${auction.price} G`);
+            console.log(`Price: ${Math.floor(auction.price).toLocaleString()} G`);
             console.log(`Quantity: ${auction.quantity}`);
             console.log(`Time Left: ${auction.time_left}`);
-            console.log(`--------------------------`);
-        });
+            console.log("--------------------------");
+        }
 
     } catch (error) {
-        console.error("Error fetching auction data:", error.message);
+        console.error("Error:", error.response?.data || error.message);
     }
 }
 
-// Fetch once & exit
-getMostRecentAuctions().then(() => process.exit(0));
+// Run the function
+console.log("Starting auction check...");
+getAuctionData()
+    .then(() => {
+        console.log("Process completed");
+        process.exit(0);
+    });
+
 

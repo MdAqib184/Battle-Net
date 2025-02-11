@@ -1,99 +1,87 @@
 const axios = require("axios");
 require("dotenv").config();
-// Blizzard API Credentials
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REALM_ID = 1329; // Example: Ravencrest (EU)
-const REGION = "eu"; // Change to "us", "kr", etc.
+// const cron = require("node-cron");
 
-// ✅ Define the items to track (Example: [Item ID: 942, Level: 65])
-const TRACKED_ITEMS = [
-    { id: 1168, level: 65 }, // Modify this list as needed
-    { id: 942, level: 65 } // Example: Another tracked item (without level filter)
-];
+const CLIENT_ID = process.env.CLIENT_ID;  // Replace with actual Client ID
+const CLIENT_SECRET = process.env.CLIENT_SECRET;  // Replace with actual Client Secret
+const TOKEN_URL = "https://oauth.battle.net/token";
+const REALM_ID = 1329;  // Replace with actual Realm ID
+const API_URL = `https://eu.api.blizzard.com/data/wow/connected-realm/${REALM_ID}/auctions?namespace=dynamic-eu`;
 
-let lastPostedAuctions = new Map();
+const ITEM_IDS = [1168, 942]; // Items to filter
 
-// Priority mapping for `time_left`
-const TIME_PRIORITY = {
-    "SHORT": 1,       // Most recent
-    "MEDIUM": 2,
-    "LONG": 3,
-    "VERY_LONG": 4    // Oldest
-};
-
-// Step 1: Get OAuth Token
+// Function to get access token
 async function getAccessToken() {
-    const response = await axios.post(
-        `https://${REGION}.battle.net/oauth/token`,
-        new URLSearchParams({ grant_type: "client_credentials" }),
-        {
-            auth: { username: CLIENT_ID, password: CLIENT_SECRET },
-        }
-    );
-    return response.data.access_token;
-}
-
-// Step 2: Fetch Auction Data from Battle.net API
-async function getAuctionData() {
     try {
-        const token = await getAccessToken();
-        const response = await axios.get(
-            `https://${REGION}.api.blizzard.com/data/wow/connected-realm/${REALM_ID}/auctions`,
-            {
-                headers: { Authorization: `Bearer ${token}` },
-                params: { namespace: `dynamic-${REGION}`, locale: "en_US" },
-            }
-        );
-
-        const auctionData = response.data.auctions;
-
-        // Step 3: Filter Auctions to Only Include Tracked Items
-        let filteredAuctions = auctionData
-            .filter(item => 
-                item.quantity > 0 && 
-                TRACKED_ITEMS.some(tracked => tracked.id === item.item.id) // Check if item is in the list
-            )
-            .map(item => ({
-                id: item.item.id,
-                price: item.unit_price ? item.unit_price / 10000 : item.buyout ? item.buyout / 10000 : "N/A",
-                quantity: item.quantity,
-                server: "Ravencrest",
-                region: REGION.toUpperCase(),
-                time_left: item.time_left
-            }));
-
-        // Step 4: Sort by `time_left` first, then price
-        filteredAuctions.sort((a, b) => {
-            const timeDiff = TIME_PRIORITY[a.time_left] - TIME_PRIORITY[b.time_left];
-            return timeDiff !== 0 ? timeDiff : b.price - a.price; // Sort by price if `time_left` is the same
+        const response = await axios.post(TOKEN_URL, "grant_type=client_credentials", {
+            auth: {
+                username: CLIENT_ID,
+                password: CLIENT_SECRET
+            },
+            headers: { "Content-Type": "application/x-www-form-urlencoded" }
         });
-
-        // Step 5: Get Only the 5 Most Recent Auctions
-        const latestAuctions = filteredAuctions.slice(0, 5);
-
-        // Step 6: Prevent Duplicates & Log New Items
-        for (const auction of latestAuctions) {
-            const key = `${auction.id}-${auction.price}-${auction.server}`;
-
-            if (!lastPostedAuctions.has(key) || lastPostedAuctions.get(key).price !== auction.price) {
-                lastPostedAuctions.set(key, auction);
-                console.log(`✅ Tracked Auction Found!`);
-                console.log(`Item ID: ${auction.id}`);
-                console.log(`Server: ${auction.server} - ${auction.region}`);
-                console.log(`Price: ${auction.price} G`);
-                console.log(`Quantity: ${auction.quantity}`);
-                console.log(`Time Left: ${auction.time_left}`);
-                console.log(`--------------------------`);
-            }
-        }
-
+        return response.data.access_token;
     } catch (error) {
-        console.error("Error fetching auction data:", error.response?.data || error.message);
+        console.error("Error getting access token:", error.message);
+        return null;
     }
 }
 
-// Fetch once & exit
-// setInterval(getAuctionData, 5 * 60 * 1000);
-// getAuctionData()
-getAuctionData().then(() => process.exit(0));
+// Function to fetch auction data
+async function fetchAuctionData() {
+    try {
+        const token = await getAccessToken();
+        if (!token) return;
+        
+        const response = await axios.get(API_URL, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        const filteredAuctions = response.data.auctions.filter(auction => ITEM_IDS.includes(auction.item.id));
+        
+        let itemData = {};
+        
+        ITEM_IDS.forEach(itemId => {
+            const itemAuctions = filteredAuctions.filter(a => a.item.id === itemId);
+            if (itemAuctions.length > 0) {
+                const firstAuction = itemAuctions[0];
+                const recentAuction = itemAuctions[itemAuctions.length - 1];
+                
+                itemData[itemId] = {
+                    first: {
+                        id: firstAuction.id,
+                        server: REALM_ID,
+                        region: "Ravencrest - EU",
+                        item_id: firstAuction.item.id,
+                        price: firstAuction.buyout ? firstAuction.buyout / 10000 : null,
+                        quantity: firstAuction.quantity,
+                        time_left: firstAuction.time_left
+                    },
+                    recent: {
+                        id: recentAuction.id,
+                        server: REALM_ID,
+                        region: "Ravencrest - EU",
+                        item_id: recentAuction.item.id,
+                        price: recentAuction.buyout ? recentAuction.buyout / 10000 : null,
+                        quantity: recentAuction.quantity,
+                        time_left: recentAuction.time_left
+                    }
+                };
+            }
+        });
+        
+        console.log("Filtered Auction Data Fetched at:", new Date().toLocaleString());
+        Object.values(itemData).forEach(item => {
+            console.log("Current Auction:", item.first);
+            console.log("Recent Auction:", item.recent);
+        });
+    } catch (error) {
+        console.error("Error fetching auction data:", error.message);
+    }
+}
+
+// // Schedule task to run every hour
+// cron.schedule("0 * * * *", fetchAuctionData);
+
+// Initial fetch on startup
+fetchAuctionData();

@@ -79,14 +79,14 @@ async function fetchAuctionDataForConfig(config) {
         console.log(`\nFetching data for ${config.realm.toUpperCase()} at ${new Date().toLocaleString()}`);
 
         for (const itemConfig of config.items) {
-            const undermineUrl = generateUndermineURL(
-                config.region, 
-                config.realm, 
-                itemConfig.id, 
-                itemConfig.targetLevel
-            );
+            // const undermineUrl = generateUndermineURL(
+            //     config.region, 
+            //     config.realm, 
+            //     itemConfig.id, 
+            //     itemConfig.targetLevel
+            // );
             
-            console.log(`\nUndermine Exchange URL: ${undermineUrl}`);
+            // console.log(`\nUndermine Exchange URL: ${undermineUrl}`);
 
             // Get item details
             const itemDetails = await getItemDetails(itemConfig.id, config.region, token);
